@@ -1,0 +1,16 @@
+# Kafka
+# MongoDB
+# Cloudflare R2
+# Frontend
+# NodeJS API
+# GO Worker
+# Redis
+
+services:
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    restart: unless-stopped
