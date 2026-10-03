@@ -14,3 +14,47 @@ services:
     ports:
       - "8080:8080"
     restart: unless-stopped
+
+  api:
+    build:
+      context: ./api
+      dockerfile: Dockerfile
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+    ports:
+      - "3000:3000"
+    init: true
+    restart: unless-stopped
+
+  mongodb:
+    image: mongo:8.0
+    ports:
+      - "127.0.0.1:27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "quit(db.adminCommand({ ping: 1 }).ok ? 0 : 1)"]
+      interval: 10s
+      timeout: 5s
+      start_period: 10s
+      retries: 5
+    restart: unless-stopped
+
+  redis:
+    image: redis:8-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  mongodb_data:
+  redis_data:
