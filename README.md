@@ -20,3 +20,7 @@ append-only persistence. Their host ports bind to localhost:
 - Redis: `redis://localhost:6379`
 
 From other Compose services, use `mongodb:27017` and `redis:6379` instead.
+
+The API connects to MongoDB using Mongoose before starting its HTTP server. Local development
+defaults to `mongodb://127.0.0.1:27017/qr_code_generator`; set `MONGODB_URI` to
+override it. Compose supplies the connection URL for the MongoDB service.

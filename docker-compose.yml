@@ -22,6 +22,10 @@ services:
     environment:
       NODE_ENV: production
       PORT: "3000"
+      MONGODB_URI: mongodb://mongodb:27017/qr_code_generator
+    depends_on:
+      mongodb:
+        condition: service_healthy
     ports:
       - "3000:3000"
     init: true
