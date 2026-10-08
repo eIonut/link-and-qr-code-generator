@@ -6,7 +6,7 @@ require (
 	github.com/aws/aws-sdk-go-v2 v1.47.1
 	github.com/aws/aws-sdk-go-v2/credentials v1.20.7
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.114.1
-	github.com/liyue201/goqr v0.0.0-20200803022322-df443203d4ea
+	github.com/makiuchi-d/gozxing v0.1.1
 	github.com/skip2/go-qrcode v0.0.0-20200617195104-da1b6568686e
 	github.com/twmb/franz-go v1.22.1
 	go.mongodb.org/mongo-driver/v2 v2.9.2
@@ -32,4 +32,5 @@ require (
 	golang.org/x/crypto v0.53.0 // indirect
 	golang.org/x/sync v0.21.0 // indirect
 	golang.org/x/text v0.39.0 // indirect
+	golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1 // indirect
 )

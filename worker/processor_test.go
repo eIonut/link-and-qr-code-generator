@@ -7,7 +7,8 @@ import (
 	"image/png"
 	"testing"
 
-	"github.com/liyue201/goqr"
+	"github.com/makiuchi-d/gozxing"
+	"github.com/makiuchi-d/gozxing/qrcode"
 )
 
 type qrUpdate struct{ status, key, code string }
@@ -38,7 +39,7 @@ func (f *fakeImages) Upload(_ context.Context, key string, png []byte) error {
 }
 
 func fixture() (*fakeLinks, *fakeImages, LinkCreated) {
-	link := &Link{ID: "link-id", ShortURL: "https://saved.example/r/link-id"}
+	link := &Link{ID: "link-id", ShortURL: "http://localhost:3000/r/0df74b31-4265-46ec-addc-342695594706"}
 	link.QR.Status, link.QR.Version = "pending", 1
 	event := LinkCreated{EventID: "event-id", EventType: "LinkCreated", SchemaVersion: 1}
 	event.Payload.LinkID, event.Payload.QRVersion = link.ID, 1
@@ -62,9 +63,13 @@ func TestProcessorGeneratesDecodableQRAndMarksReady(t *testing.T) {
 	if image.Bounds().Dx() != 512 || image.Bounds().Dy() != 512 {
 		t.Fatal("expected a 512px PNG")
 	}
-	codes, err := goqr.Recognize(image)
-	if err != nil || len(codes) != 1 || string(codes[0].Payload) != links.link.ShortURL {
-		t.Fatalf("QR must encode the saved URL: codes=%v error=%v", codes, err)
+	bitmap, err := gozxing.NewBinaryBitmapFromImage(image)
+	if err != nil {
+		t.Fatal(err)
+	}
+	decoded, err := qrcode.NewQRCodeReader().Decode(bitmap, nil)
+	if err != nil || decoded.GetText() != links.link.ShortURL {
+		t.Fatalf("QR must encode the saved URL: result=%v error=%v", decoded, err)
 	}
 }
 

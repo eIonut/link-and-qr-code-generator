@@ -94,6 +94,8 @@ the five R2 variables. Create an R2 bucket and bucket-scoped Object Read &
 Write credentials. Set `R2_ENDPOINT` to your account's S3 endpoint and
 `R2_PUBLIC_BASE_URL` to the bucket's enabled `r2.dev` URL or custom domain,
 without a bucket-name suffix. Credentials stay on the API and worker.
+The S3 endpoint must also exclude the bucket name: use
+`https://ACCOUNT_ID.r2.cloudflarestorage.com`, without `/qr-codes`.
 See [Cloudflare's S3 setup](https://developers.cloudflare.com/r2/api/tokens/)
 and [public bucket setup](https://developers.cloudflare.com/r2/buckets/public-buckets/).
 
