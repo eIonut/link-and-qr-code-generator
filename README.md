@@ -114,7 +114,11 @@ docker compose exec kafka /opt/kafka/bin/kafka-console-consumer.sh \
 The Go worker consumes `links.created.v1` with `franz-go@v1.22.1`, generates a
 512 × 512 PNG containing the saved short URL, uploads it to R2 at
 `qr/{linkId}/v1.png`, and updates only the link's QR fields in MongoDB.
-It runs independently of the API and processes one event at a time.
+It runs independently of the API. One instance fetches at most three events
+per batch and processes different partitions concurrently using goroutines.
+Events from the same partition run sequentially. With three partitions,
+one instance can process up to three QRs at once when jobs are available
+across all three; a batch containing only one partition stays sequential.
 
 To enable QR generation, copy the root `.env.example` to `.env` and fill in
 the five R2 variables. Create an R2 bucket and bucket-scoped Object Read &
@@ -140,7 +144,12 @@ state and enables Download QR. `GET /api/links/:id/qr/download` reads the PNG
 through R2's S3 API and returns an attachment. Preview requests go directly
 to the public bucket. CDN caching remains a separate custom-domain exercise.
 
-Kafka offsets are committed after MongoDB records the ready or failed state.
+Kafka offsets are committed after the whole batch finishes and MongoDB
+records the ready or failed states. The worker waits for all batch goroutines
+before committing or allowing Kafka to reassign its partitions. If any job
+returns an error, the batch is left uncommitted and the worker restarts;
+already-ready QRs are skipped on replay. This batch barrier keeps offset
+handling simple, though a slow job delays the next batch.
 Missing links, stale versions, and already-ready versions are skipped;
 duplicates therefore do not upload a second asset. Invalid events are logged
 and skipped. Generation/upload errors mark the QR failed; use the existing
