@@ -4,6 +4,8 @@ import { createServer } from "node:http";
 import { test, type TestContext } from "node:test";
 import { createApp } from "../app.ts";
 import { LinkModel } from "../models/link.ts";
+import { kafkaPublisher, linkCreatedTopic } from "../config/kafka.ts";
+import { type LinkCreatedEvent } from "../models/link-created-event.ts";
 
 const id = "7ced6051-8a2d-4a7d-a57d-9bd1fa9db3e0";
 const shortBaseUrl = "https://short.example/r";
@@ -69,9 +71,14 @@ async function expectApiError(response: Response, status: number) {
 
 test("creating a link returns the frontend contract with a real ID and pending QR", async (t) => {
   const writes: Record<string, unknown>[] = [];
+  const events: { topic: string; key: string; event: LinkCreatedEvent }[] = [];
   t.mock.method(LinkModel, "create", async (input: Record<string, unknown>) => {
     writes.push(input);
     return LinkModel.hydrate({ ...input, createdAt });
+  });
+  t.mock.method(kafkaPublisher, "publish", async (topic: string, key: string, event: LinkCreatedEvent) => {
+    assert.equal(writes.length, 1, "publish only after the link is saved");
+    events.push({ topic, key, event });
   });
   const request = await startApp(t);
   const response = await request("/api/links", createRequest({
@@ -93,9 +100,22 @@ test("creating a link returns the frontend contract with a real ID and pending Q
   assert.equal(writes.length, 1);
   assert.equal(writes[0]?.destinationUrl, body.destinationUrl);
   assert.equal(writes[0]?.shortUrl, body.shortUrl);
+  assert.equal(body.warning, undefined);
+  assert.deepEqual(events, [{
+    topic: linkCreatedTopic,
+    key: body.id,
+    event: {
+      eventId: body.id,
+      eventType: "LinkCreated",
+      schemaVersion: 1,
+      occurredAt: createdAt.toISOString(),
+      payload: { linkId: body.id, shortUrl: body.shortUrl, qrVersion: 1 },
+    },
+  }]);
 });
 
 test("creating a link without a title returns an empty title", async (t) => {
+  t.mock.method(kafkaPublisher, "publish", async () => {});
   t.mock.method(LinkModel, "create", async (input: Record<string, unknown>) =>
     LinkModel.hydrate({ ...input, createdAt }));
   const request = await startApp(t);
@@ -108,12 +128,39 @@ test("creating a link without a title returns an empty title", async (t) => {
 
 test("invalid destinations are rejected before a database write", async (t) => {
   let writes = 0;
+  const publish = t.mock.method(kafkaPublisher, "publish", async () => {});
   t.mock.method(LinkModel, "create", async () => { writes += 1; });
   const request = await startApp(t);
   for (const destinationUrl of ["not-a-url", "ftp://example.com"]) {
     await expectApiError(await request("/api/links", createRequest({ destinationUrl })), 400);
   }
   assert.equal(writes, 0);
+  assert.equal(publish.mock.callCount(), 0);
+});
+
+test("a Kafka failure preserves the saved link and returns a pending QR with a warning", async (t) => {
+  const writes: Record<string, unknown>[] = [];
+  t.mock.method(LinkModel, "create", async (input: Record<string, unknown>) => {
+    writes.push(input);
+    return LinkModel.hydrate({ ...input, createdAt });
+  });
+  t.mock.method(kafkaPublisher, "publish", async () => { throw new Error("Broker unavailable"); });
+  const request = await startApp(t);
+  const response = await request("/api/links", createRequest({ destinationUrl: "https://example.com/" }));
+  assert.equal(response.status, 201);
+  const body = await response.json();
+  assert.equal(writes.length, 1);
+  assert.equal(body.id, writes[0]?._id);
+  assert.equal(body.qr.status, "pending");
+  assert.equal(body.warning.code, "LINK_CREATED_PUBLISH_FAILED");
+});
+
+test("a failed MongoDB insert does not publish an event", async (t) => {
+  t.mock.method(LinkModel, "create", async () => { throw new Error("Database unavailable"); });
+  const publish = t.mock.method(kafkaPublisher, "publish", async () => {});
+  const request = await startApp(t);
+  await expectApiError(await request("/api/links", createRequest({ destinationUrl: "https://example.com/" })), 500);
+  assert.equal(publish.mock.callCount(), 0);
 });
 
 test("known short links return 302 with the saved destination and no-store", async (t) => {

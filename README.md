@@ -35,8 +35,58 @@ The API uses `kafkajs@2.2.4` and initializes `links.created.v1` at startup with
 three partitions and replication factor one. It waits for Kafka before
 starting its HTTP server; restarting the API leaves an existing topic intact.
 Set `KAFKA_BROKERS` to a comma-separated list to override the connection.
-Client setup lives in `api/config/kafka.ts`. Publishing `LinkCreated` from
-link creation and consuming it in the QR worker are the next steps.
+Client setup lives in `api/config/kafka.ts`. One producer stays connected for
+the API's lifetime and disconnects after active requests finish on shutdown.
+
+After MongoDB saves a new link, the API publishes `LinkCreated` to
+`links.created.v1`, keyed by the link ID. It waits for the broker acknowledgment
+before returning `201`, using [KafkaJS's producer](https://kafka.js.org/docs/producing).
+The JSON event has this shape:
+
+```json
+{
+  "eventId": "LINK_UUID",
+  "eventType": "LinkCreated",
+  "schemaVersion": 1,
+  "occurredAt": "2026-10-08T12:00:00.000Z",
+  "payload": {
+    "linkId": "LINK_UUID",
+    "shortUrl": "http://localhost:3000/r/LINK_UUID",
+    "qrVersion": 1
+  }
+}
+```
+
+Each link has one creation event. Its event ID reuses the link UUID and its
+timestamp uses the stored creation time, so republishing keeps the same event
+identity. Destination URLs and titles are not included in the event. Event
+types live in `api/models/`; publishing lives in `api/services/`.
+
+If publishing fails after saving, the API still returns `201` with the saved
+link, QR status `pending`, and `warning.code = "LINK_CREATED_PUBLISH_FAILED"`.
+The frontend shows its warning message. Producer retries and timeouts are
+bounded; MongoDB and Kafka writes are separate, so delivery is not atomic.
+Use the link ID from the response to republish after Kafka recovers:
+
+```sh
+# From api/ with MongoDB and Kafka running:
+pnpm kafka:republish LINK_ID
+# Or from the repository root with Compose:
+docker compose exec api node dist/scripts/republish-link-created.js LINK_ID
+```
+
+To inspect application events, run this in one terminal and create a link
+through the frontend or API in another:
+
+```sh
+docker compose exec kafka /opt/kafka/bin/kafka-console-consumer.sh \
+  --bootstrap-server kafka:29092 --topic links.created.v1 --from-beginning \
+  --property print.key=true
+```
+
+The QR worker consuming these events and uploading PNGs to R2 is the next step.
+Worker processing must tolerate duplicate events; producer retries or manual
+republishing can deliver the same logical event again.
 
 To verify KafkaJS production and consumption from the host:
 

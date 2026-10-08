@@ -5,6 +5,7 @@ export type Link = {
   destinationUrl: string;
   title: string;
   createdAt: string;
+  warning?: { code: string; message: string };
   qr: {
     status: "pending" | "processing" | "ready" | "failed";
     imageUrl: string | null;

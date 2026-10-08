@@ -16,6 +16,7 @@ export function LinkResult({ initialLink }: { initialLink: Link }) {
   const copy = useMutation({ mutationFn: () => navigator.clipboard.writeText(link.shortUrl) });
   const download = useMutation({ mutationFn: () => downloadQr(link) });
   const error = query.error ?? copy.error ?? download.error;
+  const message = error?.message ?? (link.qr.status === "pending" ? initialLink.warning?.message : undefined);
   const qrMessage = {
     pending: "Waiting for the QR worker…",
     processing: "Generating your QR code…",
@@ -45,7 +46,7 @@ export function LinkResult({ initialLink }: { initialLink: Link }) {
           <p role="status" className="text-sm text-muted-foreground">
             {copy.isSuccess ? "Link copied to clipboard." : "The QR code opens this link."}
           </p>
-          {error && <p role="alert" className="text-sm text-destructive">{error.message}</p>}
+          {message && <p role="alert" className="text-sm text-destructive">{message}</p>}
         </div>
 
         <div className="flex flex-col items-center gap-3 border-t pt-6 sm:border-t-0 sm:border-l sm:pt-0 sm:pl-6">

@@ -8,7 +8,8 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "test": "node --test tests/*.test.ts",
-    "kafka:smoke": "node scripts/kafka-smoke.ts"
+    "kafka:smoke": "node scripts/kafka-smoke.ts",
+    "kafka:republish": "node scripts/republish-link-created.ts"
   },
   "engines": {
     "node": ">=24"

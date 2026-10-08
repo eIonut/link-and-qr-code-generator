@@ -19,8 +19,8 @@ function serializeLink(link: LinkRecord) {
 export function createLinkHandler(shortBaseUrl: string): RequestHandler {
   return async (req, res) => {
     const input = parseCreateLinkInput(req.body);
-    const link = await createLink(input, shortBaseUrl);
-    res.status(201).json(serializeLink(link));
+    const { link, warning } = await createLink(input, shortBaseUrl);
+    res.status(201).json({ ...serializeLink(link), ...(warning && { warning }) });
   };
 }
 
