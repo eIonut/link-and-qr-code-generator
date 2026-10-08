@@ -52,14 +52,14 @@ Generated UI previews are design references. Their counts, dates, and QR pattern
 | Styling | Tailwind CSS | Implement the simple white/green UI |
 | Server-state handling | TanStack Query | Fetching, polling, error states |
 | API | Node.js, TypeScript, Express, Zod | REST endpoints, redirects, event production |
-| QR worker | Node.js, TypeScript, `qrcode` | Kafka consumption, PNG generation, R2 upload |
+| QR worker | Go, `franz-go` / `kgo` | Kafka consumption, PNG generation, R2 upload |
 | Analytics service | Go | Kafka click consumption, MongoDB queries, gRPC server |
 | Source database | MongoDB | Links and durable analytics events |
 | Cache | Redis with the Node `redis` client | Disposable redirect lookup cache |
 | Event broker | Apache Kafka | Durable event streams and consumer groups |
-| Node Kafka client | KafkaJS | Producers and QR consumer |
-| Go Kafka client | `franz-go` / `kgo` | Analytics consumer |
-| Object storage | Cloudflare R2 + AWS SDK v3 | Generated PNG objects |
+| Node Kafka client | KafkaJS | API producers |
+| Go Kafka client | `franz-go` / `kgo` | QR and analytics consumers |
+| Object storage | Cloudflare R2 via its S3-compatible API | Generated PNG objects |
 | CDN | Cloudflare cache on an R2 custom domain | Deliver public QR images |
 | RPC | `@grpc/grpc-js`, `@grpc/proto-loader`; Go `grpc-go` and protobuf | Node-to-Go analytics calls |
 | Local infrastructure | Docker Compose | Kafka, MongoDB, Redis |
@@ -98,7 +98,7 @@ flowchart TD
     API -->|Lookup cache| Redis["Redis"]
     API -->|Persist links| Mongo["MongoDB"]
     API -->|Publish events| Kafka["Kafka"]
-    Kafka -->|LinkCreated| QR["Node.js QR worker"]
+    Kafka -->|LinkCreated| QR["Go QR worker (franz-go)"]
     QR -->|Update QR status| Mongo
     QR -->|Upload PNG| R2["Cloudflare R2"]
     Kafka -->|LinkClicked| Go["Go analytics"]
@@ -373,7 +373,7 @@ Compose defaults to a 32 MiB budget and `allkeys-lru`. Set `REDIS_MAXMEMORY` or 
 
 - Create a dedicated bucket for **public QR assets**; QR links are intentionally shareable.
 - Create credentials scoped to the required bucket operations and keep them in backend environment variables.
-- Configure AWS SDK v3 `S3Client` with the R2 endpoint, credentials, and `region: "auto"`.
+- Configure the Go worker's S3 client with the R2 endpoint, credentials, and region `auto`.
 - Implement `PutObject`, `GetObject`, and an explicit development cleanup operation.
 - Use keys such as `qr/{linkId}/v1.png`, with PNG content type.
 - Keep object bytes out of Kafka messages and MongoDB documents.
@@ -483,7 +483,7 @@ A QR containing `localhost` is usable only from that same machine. To scan it wi
 ```text
 apps/web/                   React app
 services/api/               Node REST API and Kafka producer
-services/qr-worker/         Node QR consumer and R2 client
+services/qr-worker/         Go QR consumer (franz-go) and R2 client
 services/analytics/         Go consumer and gRPC server
 contracts/proto/            gRPC source definitions
 contracts/events/           JSON event schemas and fixtures
@@ -492,7 +492,7 @@ scripts/                    Seed, load, requeue, and replay helpers
 docs/                       Learning notes
 ```
 
-Use npm workspaces for Node projects; keep Go's module inside analytics. Do not create a broad shared abstraction layer before there is real duplication.
+Use npm workspaces for Node projects; keep Go modules inside the QR worker and analytics services. The current QR worker scaffold is in `worker/`. Do not create a broad shared abstraction layer before there is real duplication.
 
 Environment variable inventory:
 
@@ -660,9 +660,7 @@ Technical references checked on 2026-10-03. The architecture, contracts, default
 - [gRPC core concepts](https://grpc.io/docs/what-is-grpc/core-concepts/)
 - [gRPC Node tutorial](https://grpc.io/docs/languages/node/basics/)
 - [gRPC Go tutorial](https://grpc.io/docs/languages/go/basics/)
-- [R2 AWS SDK v3 examples](https://developers.cloudflare.com/r2/examples/aws/aws-sdk-js-v3/)
 - [R2 public buckets and custom-domain caching](https://developers.cloudflare.com/r2/buckets/public-buckets/)
 - [R2 pricing and free allowances](https://developers.cloudflare.com/r2/pricing/)
 - [S3 PutObject behavior](https://docs.aws.amazon.com/AmazonS3/latest/API/API_PutObject.html)
 - [MongoDB transactions](https://www.mongodb.com/docs/manual/core/transactions/)
-- [Node QR code generator](https://github.com/soldair/node-qrcode)

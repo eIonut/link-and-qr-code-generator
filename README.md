@@ -84,7 +84,8 @@ docker compose exec kafka /opt/kafka/bin/kafka-console-consumer.sh \
   --property print.key=true
 ```
 
-The QR worker consuming these events and uploading PNGs to R2 is the next step.
+The Go QR worker in `worker/`, using franz-go to consume these events and
+uploading PNGs to R2, is the next step.
 Worker processing must tolerate duplicate events; producer retries or manual
 republishing can deliver the same logical event again.
 
@@ -170,7 +171,7 @@ production build.
 API code stays split into `models/`, `routes/`, `controllers/`, `services/`,
 `schemas/`, `config/`, `middleware/`, and `tests/`. `app.ts` wires these together.
 
-The learning path keeps Redis redirect caching, Kafka events, a Node QR worker
+The learning path keeps Redis redirect caching, Kafka events, a Go QR worker
 uploading PNGs to R2, and a Go click-analytics worker. Retry frameworks,
 outboxes, advanced validation, and extensive recovery UI are deferred.
 See [the requirements](design/LINK_SHORTENER_REQUIREMENTS.md) for the broader
