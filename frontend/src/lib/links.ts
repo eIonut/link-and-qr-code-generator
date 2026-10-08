@@ -34,8 +34,8 @@ export async function createLink(input: CreateLinkInput): Promise<Link> {
   return response.json();
 }
 
-export async function getLink(id: string, signal: AbortSignal): Promise<Link> {
-  const response = await request(`/api/links/${encodeURIComponent(id)}`, { signal });
+export async function listLinks(signal: AbortSignal): Promise<Link[]> {
+  const response = await request("/api/links", { signal });
   return response.json();
 }
 

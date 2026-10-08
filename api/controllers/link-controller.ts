@@ -1,7 +1,7 @@
 import { type RequestHandler } from "express";
 import { type LinkRecord } from "../models/link.ts";
 import { parseCreateLinkInput } from "../schemas/link.ts";
-import { createLink, getLinkById } from "../services/link-service.ts";
+import { createLink, getLinkById, listLinks } from "../services/link-service.ts";
 import { resolveRedirect } from "../services/redirect-service.ts";
 import { qrImageUrl } from "../services/qr-service.ts";
 
@@ -32,6 +32,11 @@ export const getLinkHandler: RequestHandler<{ id: string }> = async (req, res) =
     return;
   }
   res.json(serializeLink(link));
+};
+
+export const listLinksHandler: RequestHandler = async (_req, res) => {
+  const links = await listLinks();
+  res.json(links.map(serializeLink));
 };
 
 export const redirectLinkHandler: RequestHandler<{ shortCode: string }> = async (req, res) => {

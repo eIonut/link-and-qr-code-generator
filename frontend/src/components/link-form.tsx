@@ -1,16 +1,20 @@
 import { useState, type FormEvent } from "react";
-import { useMutation } from "@tanstack/react-query";
-import { ArrowRight, Download, Link2, QrCode } from "lucide-react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { ArrowRight, Link2 } from "lucide-react";
 import { Button } from "./ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
 import { Input } from "./ui/input";
 import { createLink } from "../lib/links";
-import { LinkResult } from "./link-result";
+import { LinkList } from "./link-list";
 
 export function LinkForm() {
   const [destinationUrl, setDestinationUrl] = useState("");
   const [title, setTitle] = useState("");
-  const creation = useMutation({ mutationFn: createLink });
+  const queryClient = useQueryClient();
+  const creation = useMutation({
+    mutationFn: createLink,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["links"] }),
+  });
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -91,28 +95,12 @@ export function LinkForm() {
                   {creation.error.message}
                 </p>
               )}
+              {creation.data?.warning && <p role="alert" className="text-sm text-destructive">{creation.data.warning.message}</p>}
             </form>
           </CardContent>
         </Card>
 
-        {creation.data ? (
-          <LinkResult key={creation.data.id} initialLink={creation.data} />
-        ) : (
-          <Card className="shadow-none">
-            <CardContent className="flex flex-col items-center gap-4 py-8 text-center">
-              <div className="flex size-14 items-center justify-center rounded-2xl bg-primary/5 text-primary">
-                <QrCode className="size-7" aria-hidden="true" />
-              </div>
-              <div className="space-y-1">
-                <h2 className="font-medium">Your next link starts here</h2>
-                <p className="text-sm text-muted-foreground">Generate a link to preview and download its QR code.</p>
-              </div>
-              <Button variant="outline" className="h-10 gap-2 px-4" disabled>
-                <Download aria-hidden="true" /> Download QR
-              </Button>
-            </CardContent>
-          </Card>
-        )}
+        <LinkList />
       </main>
     </div>
   );

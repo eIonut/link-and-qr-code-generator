@@ -28,6 +28,10 @@ export function getLinkById(id: string) {
   return LinkModel.findById(id).lean().exec();
 }
 
+export function listLinks() {
+  return LinkModel.find().sort({ createdAt: -1, _id: -1 }).lean().exec();
+}
+
 export function getLinkByShortCode(shortCode: string) {
   return LinkModel.findOne({ shortCode }).lean().exec();
 }

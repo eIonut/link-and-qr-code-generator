@@ -211,6 +211,44 @@ test("missing link detail returns 404", async (t) => {
   await expectApiError(await request(`/api/links/${id}`), 404);
 });
 
+test("saved links list returns public link details including pending and ready QRs", async (t) => {
+  const previous = process.env.R2_PUBLIC_BASE_URL;
+  process.env.R2_PUBLIC_BASE_URL = "https://images.example.com";
+  t.after(() => {
+    if (previous === undefined) delete process.env.R2_PUBLIC_BASE_URL;
+    else process.env.R2_PUBLIC_BASE_URL = previous;
+  });
+  const newerId = "53a1c98e-d84c-4986-b142-2a0fd9f8d697";
+  const objectKey = `qr/${newerId}/v1.png`;
+  const newer = savedLink({
+    _id: newerId, shortCode: newerId, shortUrl: `${shortBaseUrl}/${newerId}`,
+    createdAt: new Date("2026-10-08T11:00:00.000Z"),
+    qr: { status: "ready", objectKey },
+  });
+  t.mock.method(LinkModel, "find", () => ({ sort: () => queryResult([newer, savedLink()]) }));
+  const request = await startApp(t);
+  const response = await request("/api/links");
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  assert.deepEqual(body.map((link: { id: string }) => link.id), [newerId, id]);
+  assert.equal(body[0].title, "Portfolio");
+  assert.equal(body[0].destinationUrl, newer.destinationUrl);
+  assert.equal(body[0].shortUrl, newer.shortUrl);
+  assert.equal(body[0].createdAt, newer.createdAt.toISOString());
+  assert.deepEqual(body[0].qr, { status: "ready", imageUrl: `https://images.example.com/${objectKey}` });
+  assert.deepEqual(body[1].qr, { status: "pending", imageUrl: null });
+  assert.equal(body[0]._id, undefined);
+  assert.equal(body[0].qr.objectKey, undefined);
+});
+
+test("saved links list returns an empty array when no links exist", async (t) => {
+  t.mock.method(LinkModel, "find", () => ({ sort: () => queryResult([]) }));
+  const request = await startApp(t);
+  const response = await request("/api/links");
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), []);
+});
+
 test("ready QR detail returns its public R2 image URL", async (t) => {
   const previous = process.env.R2_PUBLIC_BASE_URL;
   process.env.R2_PUBLIC_BASE_URL = "https://images.example.com/";

@@ -196,16 +196,20 @@ For a lasting choice, put these variables in a root `.env` file; otherwise
 future Compose recreations use the defaults. Changing policy takes effect on
 the existing cache.
 
-The frontend includes a shadcn/Tailwind URL form, optional title, short-link
-result, copy control, QR preview, and PNG download control. The API implements
-`POST /api/links`, `GET /api/links/:id`, and `GET /r/:shortCode` from
+The frontend includes a shadcn/Tailwind URL form, optional title, and a list
+of all saved links, newest first, with copy, QR preview, and PNG download
+controls. The list loads from MongoDB on page load, refreshes after creation,
+and polls every two seconds while any QR is pending or processing. It uses
+one list request rather than a separate polling request per link.
+The API implements `POST /api/links`, `GET /api/links`, `GET /api/links/:id`,
+and `GET /r/:shortCode` from
 [the requirements](design/LINK_SHORTENER_REQUIREMENTS.md). Links persist in
 MongoDB with one full UUID for both the link ID and public URL code.
 Creation validates HTTP/HTTPS URLs and an optional title. Existing
 seven-character links still work. Redirects return `302` with `Cache-Control: no-store`.
 
 Created links report QR status `pending` until the worker processes them.
-Pending/processing QR status is polled every two seconds until ready or failed.
+The saved-links list keeps polling until all QRs are ready or failed.
 Downloads return `409` before readiness and `404` for a missing link.
 
 For frontend development, run `pnpm install` and `pnpm dev` in `frontend`.

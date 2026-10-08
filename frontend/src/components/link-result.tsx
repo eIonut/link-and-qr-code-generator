@@ -1,22 +1,13 @@
-import { useMutation, useQuery } from "@tanstack/react-query";
-import { Check, CheckCircle2, Copy, Download, LoaderCircle, QrCode } from "lucide-react";
+import { useMutation } from "@tanstack/react-query";
+import { Check, Copy, Download, LoaderCircle, QrCode } from "lucide-react";
 import { Button } from "./ui/button";
 import { Card, CardContent } from "./ui/card";
-import { downloadQr, getLink, type Link } from "../lib/links";
+import { downloadQr, type Link } from "../lib/links";
 
-export function LinkResult({ initialLink }: { initialLink: Link }) {
-  const query = useQuery({
-    queryKey: ["link", initialLink.id],
-    queryFn: ({ signal }) => getLink(initialLink.id, signal),
-    initialData: initialLink,
-    refetchInterval: (query) => !query.state.error && ["pending", "processing"].includes(query.state.data?.qr.status ?? "") ? 2_000 : false,
-    retry: false,
-  });
-  const link = query.data;
+export function LinkResult({ link }: { link: Link }) {
   const copy = useMutation({ mutationFn: () => navigator.clipboard.writeText(link.shortUrl) });
   const download = useMutation({ mutationFn: () => downloadQr(link) });
-  const error = query.error ?? copy.error ?? download.error;
-  const message = error?.message ?? (link.qr.status === "pending" ? initialLink.warning?.message : undefined);
+  const error = copy.error ?? download.error;
   const qrMessage = {
     pending: "Waiting for the QR worker…",
     processing: "Generating your QR code…",
@@ -25,15 +16,15 @@ export function LinkResult({ initialLink }: { initialLink: Link }) {
   }[link.qr.status];
 
   return (
-    <Card className="py-6 shadow-none sm:py-8">
-      <CardContent className="grid gap-8 px-6 sm:grid-cols-[1fr_220px] sm:px-8">
-        <div className="min-w-0 space-y-5">
-          <h2 className="flex items-center gap-2 font-medium text-primary">
-            <CheckCircle2 className="size-5" aria-hidden="true" /> Your link is ready
-          </h2>
+    <Card className="py-5 shadow-none">
+      <CardContent className="grid gap-6 px-6 sm:grid-cols-[1fr_180px]">
+        <div className="min-w-0 space-y-4">
+          <div className="space-y-1">
+            <h3 className="break-words font-semibold">{link.title || "Untitled link"}</h3>
+            <p className="text-xs text-muted-foreground">Created {new Date(link.createdAt).toLocaleString()}</p>
+          </div>
           <div className="space-y-2">
-            {link.title && <p className="text-sm font-medium">{link.title}</p>}
-            <a href={link.shortUrl} target="_blank" rel="noopener noreferrer" className="block break-all text-2xl font-semibold tracking-tight underline-offset-4 hover:underline">
+            <a href={link.shortUrl} target="_blank" rel="noopener noreferrer" className="block break-all text-base font-medium text-primary underline-offset-4 hover:underline">
               {link.shortUrl}
             </a>
             <p className="text-xs text-muted-foreground">Original URL</p>
@@ -43,16 +34,14 @@ export function LinkResult({ initialLink }: { initialLink: Link }) {
             {copy.isSuccess ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}
             {copy.isSuccess ? "Copied!" : "Copy link"}
           </Button>
-          <p role="status" className="text-sm text-muted-foreground">
-            {copy.isSuccess ? "Link copied to clipboard." : "The QR code opens this link."}
-          </p>
-          {message && <p role="alert" className="text-sm text-destructive">{message}</p>}
+          {copy.isSuccess && <p role="status" className="text-xs text-muted-foreground">Link copied to clipboard.</p>}
+          {error && <p role="alert" className="text-sm text-destructive">{error.message}</p>}
         </div>
 
         <div className="flex flex-col items-center gap-3 border-t pt-6 sm:border-t-0 sm:border-l sm:pt-0 sm:pl-6">
-          <div className="flex size-44 items-center justify-center rounded-xl border bg-white p-3">
+          <div className="flex size-28 items-center justify-center rounded-xl border bg-white p-2">
             {link.qr.status === "ready" && link.qr.imageUrl ? (
-              <img src={link.qr.imageUrl} alt={`QR code for ${link.title || link.shortUrl}`} className="size-full object-contain" />
+              <img src={link.qr.imageUrl} alt={`QR code for ${link.title || link.shortUrl}`} loading="lazy" className="size-full object-contain" />
             ) : ["pending", "processing"].includes(link.qr.status) ? (
               <LoaderCircle className="size-8 animate-spin text-muted-foreground" aria-hidden="true" />
             ) : (
