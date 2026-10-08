@@ -24,6 +24,33 @@ append-only persistence. Their host ports bind to localhost:
 
 From other Compose services, use `mongodb:27017` and `redis:6379` instead.
 
+To inspect Redis and Kafka in your browser, start the optional dashboards:
+
+```sh
+docker compose --profile tools up -d redis-ui kafka-ui
+```
+
+- [Redis Commander](http://localhost:8082): expand `local`, then `link`, and
+  select a cached key to see its `{ id, destinationUrl }` value and remaining
+  TTL. Refresh the tree to see new keys. Only opening a short URL populates
+  this cache; generating a link alone does not.
+- [Kafbat UI](http://localhost:8081): open **Topics → links.created.v1 →
+  Messages** to inspect `LinkCreated` events. Open **Consumers →
+  qr-workers-v1** to see partition offsets and lag. Lag zero means the worker
+  has consumed all available events. Consumed messages remain visible until
+  Kafka's retention removes them.
+
+Both dashboards connect automatically, bind to localhost, and run in
+read-only mode. They query the current services when you refresh. To watch
+the flow, generate a link, inspect its Kafka event, open its short URL, and
+refresh Redis to see the new cached destination.
+
+The configuration follows the [Redis Commander Docker setup](https://github.com/joeferner/redis-commander#with-docker-compose)
+and [Kafbat configuration guide](https://ui.docs.kafbat.io/configuration/configuration-file).
+Redis Commander's multi-platform image is pinned by digest; Kafbat is pinned
+to version 1.5.0. Stop the dashboards without stopping the app with
+`docker compose --profile tools stop redis-ui kafka-ui`.
+
 Kafka runs as one broker/controller in KRaft mode using the pinned
 `apache/kafka:4.3.1` image. Records persist in the `kafka_data` volume with
 seven-day retention. Host processes connect to `localhost:9092`; Compose

@@ -60,6 +60,35 @@ services:
     init: true
     restart: unless-stopped
 
+  kafka-ui:
+    image: ghcr.io/kafbat/kafka-ui:v1.5.0
+    profiles: ["tools"]
+    environment:
+      KAFKA_CLUSTERS_0_NAME: local
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
+      KAFKA_CLUSTERS_0_READONLY: "true"
+    depends_on:
+      kafka:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:8081:8080"
+    restart: unless-stopped
+
+  redis-ui:
+    image: ghcr.io/joeferner/redis-commander@sha256:1ad484c1fc0a3b4072dfa2bb10d44f0eba8ecb342c8c0f9e17cb21a6557e4b7e
+    profiles: ["tools"]
+    user: redis
+    environment:
+      REDIS_HOSTS: local:redis:6379
+      READ_ONLY: "true"
+      VIEW_JSON_DEFAULT: string
+    depends_on:
+      redis:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:8082:8081"
+    restart: unless-stopped
+
   mongodb:
     image: mongo:8.0
     ports:
