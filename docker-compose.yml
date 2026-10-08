@@ -22,6 +22,7 @@ services:
     environment:
       NODE_ENV: production
       PORT: "3000"
+      SHORT_BASE_URL: ${SHORT_BASE_URL:-http://localhost:3000/r}
       MONGODB_URI: mongodb://mongodb:27017/qr_code_generator
     depends_on:
       mongodb:

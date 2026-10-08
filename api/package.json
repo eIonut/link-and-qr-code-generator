@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "node --watch index.ts",
     "build": "tsc",
-    "start": "node dist/index.js"
+    "start": "node dist/index.js",
+    "test": "node --test *.test.ts"
   },
   "engines": {
     "node": ">=24"
@@ -14,7 +15,8 @@
   "dependencies": {
     "dotenv": "^18.0.5",
     "express": "^5.2.1",
-    "mongoose": "^9.10.3"
+    "mongoose": "^9.10.3",
+    "zod": "4.6.5"
   },
   "devDependencies": {
     "@types/express": "^5.0.6",
