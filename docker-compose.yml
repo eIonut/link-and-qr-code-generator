@@ -26,6 +26,11 @@ services:
       MONGODB_URI: mongodb://mongodb:27017/qr_code_generator
       REDIS_URL: redis://redis:6379
       KAFKA_BROKERS: kafka:29092
+      R2_ENDPOINT: ${R2_ENDPOINT:-}
+      R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID:-}
+      R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY:-}
+      R2_BUCKET_NAME: ${R2_BUCKET_NAME:-}
+      R2_PUBLIC_BASE_URL: ${R2_PUBLIC_BASE_URL:-}
     depends_on:
       mongodb:
         condition: service_healthy
@@ -33,6 +38,25 @@ services:
         condition: service_healthy
     ports:
       - "3000:3000"
+    init: true
+    restart: unless-stopped
+
+  qr-worker:
+    build: ./worker
+    profiles: ["qr"]
+    environment:
+      MONGODB_URI: mongodb://mongodb:27017/qr_code_generator
+      KAFKA_BROKERS: kafka:29092
+      KAFKA_QR_GROUP_ID: qr-workers-v1
+      R2_ENDPOINT: ${R2_ENDPOINT:-}
+      R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID:-}
+      R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY:-}
+      R2_BUCKET_NAME: ${R2_BUCKET_NAME:-}
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
     init: true
     restart: unless-stopped
 

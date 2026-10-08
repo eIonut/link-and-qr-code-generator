@@ -492,7 +492,7 @@ scripts/                    Seed, load, requeue, and replay helpers
 docs/                       Learning notes
 ```
 
-Use npm workspaces for Node projects; keep Go modules inside the QR worker and analytics services. The current QR worker scaffold is in `worker/`. Do not create a broad shared abstraction layer before there is real duplication.
+Keep Go modules inside the QR worker and analytics services. The implemented QR worker is in `worker/`, using franz-go, the MongoDB Go driver, and the AWS Go SDK for R2. The current Node projects remain separate in `api/` and `frontend/`. Do not create a broad shared abstraction layer before there is real duplication.
 
 Environment variable inventory:
 

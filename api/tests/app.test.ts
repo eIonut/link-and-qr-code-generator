@@ -6,6 +6,7 @@ import { createApp } from "../app.ts";
 import { LinkModel } from "../models/link.ts";
 import { kafkaPublisher, linkCreatedTopic } from "../config/kafka.ts";
 import { type LinkCreatedEvent } from "../models/link-created-event.ts";
+import { qrStorage } from "../config/r2.ts";
 
 const id = "7ced6051-8a2d-4a7d-a57d-9bd1fa9db3e0";
 const shortBaseUrl = "https://short.example/r";
@@ -208,4 +209,45 @@ test("missing link detail returns 404", async (t) => {
   t.mock.method(LinkModel, "findById", () => queryResult(null));
   const request = await startApp(t);
   await expectApiError(await request(`/api/links/${id}`), 404);
+});
+
+test("ready QR detail returns its public R2 image URL", async (t) => {
+  const previous = process.env.R2_PUBLIC_BASE_URL;
+  process.env.R2_PUBLIC_BASE_URL = "https://images.example.com/";
+  t.after(() => {
+    if (previous === undefined) delete process.env.R2_PUBLIC_BASE_URL;
+    else process.env.R2_PUBLIC_BASE_URL = previous;
+  });
+  const objectKey = `qr/${id}/v1.png`;
+  t.mock.method(LinkModel, "findById", () => queryResult(savedLink({ qr: { status: "ready", objectKey } })));
+  const request = await startApp(t);
+  const response = await request(`/api/links/${id}`);
+  const body = await response.json();
+  assert.equal(body.qr.imageUrl, `https://images.example.com/${objectKey}`);
+});
+
+test("ready QR downloads the saved R2 object as a PNG attachment", async (t) => {
+  const objectKey = `qr/${id}/v1.png`;
+  const png = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
+  t.mock.method(LinkModel, "findById", () => queryResult(savedLink({ qr: { status: "ready", objectKey } })));
+  t.mock.method(qrStorage, "get", async (key: string) => {
+    assert.equal(key, objectKey);
+    return png;
+  });
+  const request = await startApp(t);
+  const response = await request(`/api/links/${id}/qr/download`);
+  assert.equal(response.status, 200);
+  assert.match(response.headers.get("content-type") ?? "", /^image\/png/);
+  assert.match(response.headers.get("content-disposition") ?? "", /attachment; filename="abc1234-qr.png"/);
+  assert.deepEqual(Buffer.from(await response.arrayBuffer()), png);
+});
+
+test("missing or pending QR downloads do not read R2", async (t) => {
+  const get = t.mock.method(qrStorage, "get", async () => Buffer.alloc(0));
+  const request = await startApp(t);
+  t.mock.method(LinkModel, "findById", () => queryResult(null));
+  await expectApiError(await request(`/api/links/${id}/qr/download`), 404);
+  t.mock.method(LinkModel, "findById", () => queryResult(savedLink()));
+  await expectApiError(await request(`/api/links/${id}/qr/download`), 409);
+  assert.equal(get.mock.callCount(), 0);
 });

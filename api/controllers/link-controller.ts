@@ -3,6 +3,7 @@ import { type LinkRecord } from "../models/link.ts";
 import { parseCreateLinkInput } from "../schemas/link.ts";
 import { createLink, getLinkById } from "../services/link-service.ts";
 import { resolveRedirect } from "../services/redirect-service.ts";
+import { qrImageUrl } from "../services/qr-service.ts";
 
 function serializeLink(link: LinkRecord) {
   return {
@@ -12,7 +13,7 @@ function serializeLink(link: LinkRecord) {
     destinationUrl: link.destinationUrl,
     title: link.title ?? "",
     createdAt: link.createdAt.toISOString(),
-    qr: { status: link.qr.status, imageUrl: null },
+    qr: { status: link.qr.status, imageUrl: qrImageUrl(link) },
   };
 }
 

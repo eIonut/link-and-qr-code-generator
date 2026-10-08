@@ -6,7 +6,7 @@ import { readEnvironment } from "./config/environment.ts";
 import { connectRedis } from "./config/redis.ts";
 import { initializeKafka, kafkaPublisher } from "./config/kafka.ts";
 
-dotenv.config();
+dotenv.config({ path: [".env", "../.env"] });
 
 const { port, shortBaseUrl, mongodbUri, redisUrl, kafkaBrokers } = readEnvironment();
 const app = createApp({ shortBaseUrl });

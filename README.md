@@ -1,6 +1,6 @@
 # Link and QR generator
 
-A local POC for learning Redis, Kafka, Cloudflare R2, and a Go analytics worker.
+A local POC for learning Redis, Kafka, Cloudflare R2, and Go workers.
 Keep the implementation focused on the happy path and basic errors.
 
 Run the frontend, API, MongoDB, Redis, and Kafka with Docker Compose:
@@ -84,10 +84,62 @@ docker compose exec kafka /opt/kafka/bin/kafka-console-consumer.sh \
   --property print.key=true
 ```
 
-The Go QR worker in `worker/`, using franz-go to consume these events and
-uploading PNGs to R2, is the next step.
-Worker processing must tolerate duplicate events; producer retries or manual
-republishing can deliver the same logical event again.
+The Go worker consumes `links.created.v1` with `franz-go@v1.22.1`, generates a
+512 × 512 PNG containing the saved short URL, uploads it to R2 at
+`qr/{linkId}/v1.png`, and updates only the link's QR fields in MongoDB.
+It runs independently of the API and processes one event at a time.
+
+To enable QR generation, copy the root `.env.example` to `.env` and fill in
+the five R2 variables. Create an R2 bucket and bucket-scoped Object Read &
+Write credentials. Set `R2_ENDPOINT` to your account's S3 endpoint and
+`R2_PUBLIC_BASE_URL` to the bucket's enabled `r2.dev` URL or custom domain,
+without a bucket-name suffix. Credentials stay on the API and worker.
+See [Cloudflare's S3 setup](https://developers.cloudflare.com/r2/api/tokens/)
+and [public bucket setup](https://developers.cloudflare.com/r2/buckets/public-buckets/).
+
+```sh
+cp .env.example .env
+# Fill in .env, then start the API and worker with the shared R2 settings:
+docker compose --profile qr up --build -d
+docker compose logs -f qr-worker
+```
+
+The `qr` profile keeps the worker optional until R2 is configured. Without it,
+links and redirects still work and QR jobs remain pending. The API returns
+the public R2 image URL once the QR is ready; the existing UI polls for this
+state and enables Download QR. `GET /api/links/:id/qr/download` reads the PNG
+through R2's S3 API and returns an attachment. Preview requests go directly
+to the public bucket. CDN caching remains a separate custom-domain exercise.
+
+Kafka offsets are committed after MongoDB records the ready or failed state.
+Missing links, stale versions, and already-ready versions are skipped;
+duplicates therefore do not upload a second asset. Invalid events are logged
+and skipped. Generation/upload errors mark the QR failed; use the existing
+republish command above after fixing the cause. Database or offset-commit
+errors stop the worker without committing that event; Compose restarts it.
+There is no custom retry queue or dead-letter service.
+
+For host development, use Go 1.26 or newer and export the root `.env` values
+before running the worker. When using a different MongoDB database, set
+`LINKS_DB_NAME` to match the API's database. The default group is
+`qr-workers-v1`; override it with `KAFKA_QR_GROUP_ID`.
+
+```sh
+set -a
+source .env
+set +a
+cd worker
+go run .
+# Verification:
+go test ./...
+go vet ./...
+```
+
+The worker stays in one Go package, split into configuration, event decoding,
+Kafka consumption, QR processing, MongoDB updates, and R2 storage files.
+Its processor depends on two small storage interfaces. Tests decode the
+generated PNG and verify failure handling, duplicate skipping, and signed
+S3 upload requests without cloud credentials. The Docker build pins Go 1.26.8.
 
 To verify KafkaJS production and consumption from the host:
 
@@ -150,9 +202,9 @@ MongoDB with one full UUID for both the link ID and public URL code.
 Creation validates HTTP/HTTPS URLs and an optional title. Existing
 seven-character links still work. Redirects return `302` with `Cache-Control: no-store`.
 
-The QR worker and `GET /api/links/:id/qr/download` endpoint are a later
-milestone. Created links currently report QR status `pending`; downloading
-remains disabled. Pending/processing QR status is polled every two seconds until ready or failed.
+Created links report QR status `pending` until the worker processes them.
+Pending/processing QR status is polled every two seconds until ready or failed.
+Downloads return `409` before readiness and `404` for a missing link.
 
 For frontend development, run `pnpm install` and `pnpm dev` in `frontend`.
 Vite proxies `/api` to `http://localhost:3000`; the Docker frontend proxies
@@ -162,7 +214,8 @@ API must allow the frontend origin through CORS.
 
 For API development, run `pnpm install` and `pnpm dev` in `api`, with MongoDB
 and Kafka running. Copy `api/.env.example` to `api/.env` to override the port,
-database, `REDIS_URL`, `KAFKA_BROKERS`, or `SHORT_BASE_URL`. The short base URL includes `/r` and is saved with each
+database, `REDIS_URL`, `KAFKA_BROKERS`, or `SHORT_BASE_URL`. The API also reads
+the shared R2 variables from the root `.env`. The short base URL includes `/r` and is saved with each
 new link. For phone access, use a reachable LAN address or deployed domain
 before creating links. Compose accepts a `SHORT_BASE_URL` environment override
 too. Run `pnpm test` for API behavior tests and `pnpm build` for a typechecked
