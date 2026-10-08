@@ -4,10 +4,11 @@ import { createApp } from "./app.ts";
 import { LinkModel } from "./models/link.ts";
 import { readEnvironment } from "./config/environment.ts";
 import { connectRedis } from "./config/redis.ts";
+import { initializeKafka } from "./config/kafka.ts";
 
 dotenv.config();
 
-const { port, shortBaseUrl, mongodbUri, redisUrl } = readEnvironment();
+const { port, shortBaseUrl, mongodbUri, redisUrl, kafkaBrokers } = readEnvironment();
 const app = createApp({ shortBaseUrl });
 
 await mongoose.connect(mongodbUri);
@@ -15,6 +16,7 @@ await mongoose.connect(mongodbUri);
 await LinkModel.createIndexes();
 console.log("Connected to MongoDB and ensured link indexes");
 connectRedis(redisUrl);
+await initializeKafka(kafkaBrokers);
 
 app.listen(port, () => {
   console.log(`API server listening on http://localhost:${port}`);

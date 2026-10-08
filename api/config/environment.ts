@@ -4,6 +4,7 @@ export function readEnvironment() {
     port,
     mongodbUri: process.env.MONGODB_URI ?? "mongodb://127.0.0.1:27017/qr_code_generator",
     redisUrl: process.env.REDIS_URL ?? "redis://127.0.0.1:6379",
+    kafkaBrokers: (process.env.KAFKA_BROKERS ?? "localhost:9092").split(",").map((broker) => broker.trim()),
     shortBaseUrl: process.env.SHORT_BASE_URL ?? `http://localhost:${port}/r`,
   };
 }

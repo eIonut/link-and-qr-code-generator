@@ -3,7 +3,7 @@
 A local POC for learning Redis, Kafka, Cloudflare R2, and a Go analytics worker.
 Keep the implementation focused on the happy path and basic errors.
 
-Run the frontend, API, MongoDB, and Redis with Docker Compose:
+Run the frontend, API, MongoDB, Redis, and Kafka with Docker Compose:
 
 ```sh
 docker compose up --build -d
@@ -23,6 +23,44 @@ append-only persistence. Their host ports bind to localhost:
 - Redis: `redis://localhost:6379`
 
 From other Compose services, use `mongodb:27017` and `redis:6379` instead.
+
+Kafka runs as one broker/controller in KRaft mode using the pinned
+`apache/kafka:4.3.1` image. Records persist in the `kafka_data` volume with
+seven-day retention. Host processes connect to `localhost:9092`; Compose
+services connect to `kafka:29092`. Both addresses are advertised by Kafka so
+clients can reach the broker after fetching its metadata. This follows the
+[Apache Kafka Docker setup](https://hub.docker.com/r/apache/kafka/).
+
+The API uses `kafkajs@2.2.4` and initializes `links.created.v1` at startup with
+three partitions and replication factor one. It waits for Kafka before
+starting its HTTP server; restarting the API leaves an existing topic intact.
+Set `KAFKA_BROKERS` to a comma-separated list to override the connection.
+Client setup lives in `api/config/kafka.ts`. Publishing `LinkCreated` from
+link creation and consuming it in the QR worker are the next steps.
+
+To verify KafkaJS production and consumption from the host:
+
+```sh
+docker compose up -d --wait kafka
+cd api
+pnpm install
+pnpm kafka:smoke
+```
+
+The check publishes a unique message to `poc.smoke.v1` and verifies the same
+message is consumed, following the [KafkaJS quickstart](https://kafka.js.org/docs/getting-started).
+It uses a separate topic so test messages do not become QR jobs. To check the
+Compose listener with the built API container, run from the repository root:
+
+```sh
+docker compose exec api node dist/scripts/kafka-smoke.js
+docker compose exec kafka /opt/kafka/bin/kafka-topics.sh \
+  --bootstrap-server kafka:29092 --describe --topic links.created.v1
+```
+
+KafkaJS 2.2.4 emits a `TimeoutNegativeWarning` from its internal request-queue
+timer in this Node 24 setup. Both host and container produce/consume checks
+pass; the warning is recorded here so it is recognizable in startup logs.
 
 The API connects to MongoDB using Mongoose before starting its HTTP server. Local development
 defaults to `mongodb://127.0.0.1:27017/qr_code_generator`; set `MONGODB_URI` to
@@ -72,8 +110,8 @@ to `frontend/.env` and set `VITE_API_BASE_URL` before building. The separate
 API must allow the frontend origin through CORS.
 
 For API development, run `pnpm install` and `pnpm dev` in `api`, with MongoDB
-running. Copy `api/.env.example` to `api/.env` to override the port, database,
-`REDIS_URL`, or `SHORT_BASE_URL`. The short base URL includes `/r` and is saved with each
+and Kafka running. Copy `api/.env.example` to `api/.env` to override the port,
+database, `REDIS_URL`, `KAFKA_BROKERS`, or `SHORT_BASE_URL`. The short base URL includes `/r` and is saved with each
 new link. For phone access, use a reachable LAN address or deployed domain
 before creating links. Compose accepts a `SHORT_BASE_URL` environment override
 too. Run `pnpm test` for API behavior tests and `pnpm build` for a typechecked

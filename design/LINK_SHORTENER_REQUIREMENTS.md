@@ -264,6 +264,12 @@ Do not buffer arbitrarily large objects or accept an arbitrary object key from t
 
 ## 7. Kafka contracts and learning tasks
 
+Current POC infrastructure: Compose runs a single `apache/kafka:4.3.1` KRaft
+broker with persistent storage. The API uses KafkaJS 2.2.4 and ensures
+`links.created.v1` exists at startup. `pnpm kafka:smoke` in `api/` checks a
+produce/consume round trip on a separate smoke topic. Application event
+publishing, the click topic, and workers are the next milestones.
+
 ### Topics and groups
 
 | Topic | Partition key | Initial partitions | Consumer group |
