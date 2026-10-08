@@ -1,4 +1,7 @@
-# link-and-qr-code-generator
+# Link and QR generator
+
+A local POC for learning Redis, Kafka, Cloudflare R2, and a Go analytics worker.
+Keep the implementation focused on the happy path and basic errors.
 
 Run the frontend, API, MongoDB, and Redis with Docker Compose:
 
@@ -25,18 +28,42 @@ The API connects to MongoDB using Mongoose before starting its HTTP server. Loca
 defaults to `mongodb://127.0.0.1:27017/qr_code_generator`; set `MONGODB_URI` to
 override it. Compose supplies the connection URL for the MongoDB service.
 
+Redirects use Redis as a cache. The first request reads MongoDB and saves
+`{ id, destinationUrl }` at `link:<shortCode>` for one hour. Later requests
+use that cached value. API logs show `cache miss` and `cache hit`. Redis
+connects in the background; redirects use MongoDB while Redis is unavailable,
+and caching resumes when it reconnects. Cache commands time out after one
+second rather than waiting on Redis indefinitely.
+
+Redis now has a 32 MiB cache budget and defaults to `allkeys-lru`. LRU evicts
+entries that have not been used recently; LFU favors entries used frequently,
+with counters that age over time. Both are approximations provided by Redis,
+and eviction under memory pressure is separate from the one-hour TTL.
+See [Redis's eviction guide](https://redis.io/docs/latest/develop/reference/eviction/).
+
+To switch the app to LFU, run this from the repository root:
+
+```sh
+REDIS_EVICTION_POLICY=allkeys-lfu docker compose up -d redis
+docker compose exec redis redis-cli CONFIG GET maxmemory maxmemory-policy
+```
+
+Use `allkeys-lru` to switch back. Set `REDIS_MAXMEMORY` to change the budget.
+For a lasting choice, put these variables in a root `.env` file; otherwise
+future Compose recreations use the defaults. Changing policy takes effect on
+the existing cache.
+
 The frontend includes a shadcn/Tailwind URL form, optional title, short-link
 result, copy control, QR preview, and PNG download control. The API implements
 `POST /api/links`, `GET /api/links/:id`, and `GET /r/:shortCode` from
 [the requirements](design/LINK_SHORTENER_REQUIREMENTS.md). Links persist in
-MongoDB with UUID IDs and unique, case-sensitive, seven-character public
-codes. Creation validates HTTP/HTTPS URLs, rejects embedded credentials, and
-retries short-code collisions. Redirects return `302` with `Cache-Control: no-store`.
+MongoDB with one full UUID for both the link ID and public URL code.
+Creation validates HTTP/HTTPS URLs and an optional title. Existing
+seven-character links still work. Redirects return `302` with `Cache-Control: no-store`.
 
 The QR worker and `GET /api/links/:id/qr/download` endpoint are a later
 milestone. Created links currently report QR status `pending`; downloading
-remains disabled. Pending QR status is polled every two seconds for up to
-two minutes, with a manual status check afterward.
+remains disabled. Pending/processing QR status is polled every two seconds until ready or failed.
 
 For frontend development, run `pnpm install` and `pnpm dev` in `frontend`.
 Vite proxies `/api` to `http://localhost:3000`; the Docker frontend proxies
@@ -46,11 +73,20 @@ API must allow the frontend origin through CORS.
 
 For API development, run `pnpm install` and `pnpm dev` in `api`, with MongoDB
 running. Copy `api/.env.example` to `api/.env` to override the port, database,
-or `SHORT_BASE_URL`. The short base URL includes `/r` and is saved with each
+`REDIS_URL`, or `SHORT_BASE_URL`. The short base URL includes `/r` and is saved with each
 new link. For phone access, use a reachable LAN address or deployed domain
 before creating links. Compose accepts a `SHORT_BASE_URL` environment override
 too. Run `pnpm test` for API behavior tests and `pnpm build` for a typechecked
 production build.
+
+API code stays split into `models/`, `routes/`, `controllers/`, `services/`,
+`schemas/`, `config/`, `middleware/`, and `tests/`. `app.ts` wires these together.
+
+The learning path keeps Redis redirect caching, Kafka events, a Node QR worker
+uploading PNGs to R2, and a Go click-analytics worker. Retry frameworks,
+outboxes, advanced validation, and extensive recovery UI are deferred.
+See [the requirements](design/LINK_SHORTENER_REQUIREMENTS.md) for the broader
+learning guide.
 
 To check link creation and inspect its redirect without following it:
 
@@ -60,4 +96,22 @@ curl -i http://localhost:3000/api/links \
   -d '{"destinationUrl":"https://example.com/portfolio","title":"Portfolio"}'
 # Use the shortUrl returned above:
 curl -i http://localhost:3000/r/RETURNED_CODE
+```
+
+To observe Redis, create a new link and request its short URL twice without
+following redirects. Check the logs and remaining cache lifetime:
+
+```sh
+docker compose logs --tail=20 api
+docker compose exec redis redis-cli GET link:RETURNED_CODE
+docker compose exec redis redis-cli TTL link:RETURNED_CODE
+```
+
+Then stop Redis, repeat the redirect, and restart it. The redirect should
+still return `302` with the same destination:
+
+```sh
+docker compose stop redis
+curl -i http://localhost:3000/r/RETURNED_CODE
+docker compose start redis
 ```

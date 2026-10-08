@@ -11,7 +11,7 @@ FROM base AS build
 # Cache dependencies independently of the application source.
 RUN --mount=type=cache,id=api-pnpm,target=/pnpm/store \
     pnpm install --frozen-lockfile --store-dir=/pnpm/store
-COPY *.ts tsconfig.json ./
+COPY . .
 RUN pnpm build
 
 FROM base AS production-dependencies

@@ -2,7 +2,7 @@
 
 > Build a small URL shortener with downloadable QR codes and click analytics. Use it to practice Redis caching, Kafka, Cloudflare R2, CDN caching, and gRPC between Node.js and Go.
 >
-> Start with Milestone 1. Each milestone adds one concept to a working application. This document is a specification and implementation checklist, not an already implemented application.
+> POC focus: learn Redis caching, Kafka, Cloudflare R2, and Go analytics through a working app. Keep the happy path and basic errors small. Advanced validation, recovery flows, benchmarks, and the reliability extension are later exercises, not prerequisites. This is a guide, not a description of features already implemented.
 
 ## 1. Product requirements
 
@@ -15,7 +15,7 @@ Example:
 
 ```text
 Destination: https://example.com/portfolio
-Short URL:   http://localhost:4000/r/8k2m7pq
+Short URL:   http://localhost:4000/r/7ced6051-8a2d-4a7d-a57d-9bd1fa9db3e0
 QR download: portfolio-qr.png
 ```
 
@@ -24,9 +24,8 @@ The QR encodes the **short URL**, not the destination. Opening it therefore goes
 ### Required behavior
 
 - Accept an absolute HTTP or HTTPS destination URL and an optional title.
-- Generate a random, case-sensitive, seven-character short code.
+- Use a full UUID for the link ID and public URL code in the POC.
 - Persist links in MongoDB with a unique index on the short code.
-- Retry generation if a short-code collision occurs.
 - Redirect valid short links with HTTP `302`.
 - Return `404` for an unknown short code.
 - Cache redirect lookups in Redis; continue working if Redis is unavailable.
@@ -116,12 +115,12 @@ REST handles browser requests. gRPC handles an immediate request/response betwee
 ### A. Create a short link
 
 1. Browser sends `POST /api/links` with a destination and title.
-2. API validates the URL. Allow only `http:` and `https:` and reject embedded username/password credentials. Do not fetch the destination as part of link creation.
-3. API generates a short code using a cryptographically secure random generator.
+2. API validates the URL. Allow only `http:` and `https:`. Do not fetch the destination as part of link creation.
+3. API generates a UUID and uses it as the link ID and public URL code.
 4. API inserts a MongoDB document with `qr.status = "pending"`.
 5. API publishes `LinkCreated` and awaits the broker acknowledgment.
 6. API returns `201` with the link and its current QR state.
-7. Browser polls the link detail every two seconds while its QR is pending or processing; stop on ready/failed and set a finite polling window.
+7. Browser polls the link detail every two seconds while its QR is pending or processing; stop on ready/failed.
 
 In the early milestone, saving MongoDB data and publishing Kafka data are separate operations. If publishing fails, preserve the link, leave its QR pending, log the failure, and return the created link with a machine-readable warning. Provide a development repair command that republishes the event for that existing link. Do not silently describe this as atomic delivery. The outbox milestone closes this gap.
 
@@ -177,9 +176,9 @@ Use UUID strings for IDs across Node.js, Go, and Kafka to simplify serialization
 
 ```json
 {
-  "_id": "a-uuid-link-id",
-  "shortCode": "8k2m7pq",
-  "shortUrl": "http://localhost:4000/r/8k2m7pq",
+  "_id": "7ced6051-8a2d-4a7d-a57d-9bd1fa9db3e0",
+  "shortCode": "7ced6051-8a2d-4a7d-a57d-9bd1fa9db3e0",
+  "shortUrl": "http://localhost:4000/r/7ced6051-8a2d-4a7d-a57d-9bd1fa9db3e0",
   "destinationUrl": "https://example.com/portfolio",
   "title": "Portfolio",
   "createdAt": "2026-10-03T09:00:00.000Z",
@@ -238,14 +237,13 @@ Create request:
 
 Create response contains `id`, `shortCode`, `shortUrl`, `destinationUrl`, `title`, `createdAt`, and a `qr` object with status and nullable image URL. Optional `warnings` describes an early-stage dispatch failure.
 
-Validation defaults: destination at most 2,048 characters; title at most 120; request JSON body limit 16 KB; list limit 1–100; stats period 1–30 days. Limit these server-side.
+For the POC, validate an HTTP/HTTPS URL and an optional string title. Keep normal Express defaults. Add list and stats bounds when those endpoints are implemented.
 
-Use consistent errors:
+Keep error responses simple in the POC (a status and readable message); detailed codes below are optional examples:
 
 ```json
 {
   "error": {
-    "code": "ANALYTICS_UNAVAILABLE",
     "message": "Analytics is temporarily unavailable."
   }
 }
@@ -319,13 +317,13 @@ Validate events in both languages. Keep JSON schemas/fixtures in `contracts/even
 
 Reliability extension: bounded exponential-backoff retries; explicit dead-letter topics with original event, error code, and attempt count. Kafka is not a built-in delayed-job scheduler; retry scheduling and poison-message policy are application work. Define when a failed message can be committed after its failure record is durably saved.
 
-## 8. Redis caching and LRU/LFU experiment
+## 8. Redis caching and eviction
 
 ### Implementation
 
 ```text
 Key:   link:{shortCode}
-Value: {"linkId":"...","destinationUrl":"https://..."}
+Value: {"id":"...","destinationUrl":"https://..."}
 TTL:   3,600 seconds
 ```
 
@@ -340,7 +338,7 @@ maxmemory 32mb
 maxmemory-policy allkeys-lru
 ```
 
-Comparison configuration:
+Optional LFU configuration:
 
 ```conf
 maxmemory 32mb
@@ -349,26 +347,15 @@ maxmemory-policy allkeys-lfu
 
 Only one policy applies to an instance at a time. LRU uses recency; LFU uses frequency with aging. Redis implementations are approximate. TTL expiration and eviction under memory pressure are different mechanisms. `maxmemory` budgets cache memory; it is not a hard cap on total process RSS, and temporary overshoot/other buffers can exist.
 
-### Repeatable benchmark
-
-1. Use a separate disposable Redis database/instance and seed enough synthetic links to exceed its budget. Tiny lookup values need many entries; thousands may not be enough. Measure rather than assume.
-2. Use one recorded random seed and identical request sequence for both runs.
-3. Warm the cache with a popular subset. Send mostly hot-link requests, then a broad scan of one-time links, then return to the hot subset.
-4. Add a second scenario where the popular subset changes. Neither policy should be declared universally better.
-5. Start each run from a clean cache and reset or record baseline statistics. Avoid TTL expiration dominating this short experiment.
-6. Record deltas for `keyspace_hits`, `keyspace_misses`, and `evicted_keys`, plus `INFO memory`, MongoDB lookup count, and API p50/p95 latency.
-7. Calculate hit ratio as hits / (hits + misses). Repeated runs should use the same setup and workload.
-
-Local commands:
+Inspect the running cache:
 
 ```bash
-redis-cli CONFIG SET maxmemory 32mb
-redis-cli CONFIG SET maxmemory-policy allkeys-lru
-redis-cli INFO stats
-redis-cli INFO memory
+docker compose exec redis redis-cli CONFIG GET maxmemory maxmemory-policy
+docker compose exec redis redis-cli INFO stats
+docker compose exec redis redis-cli INFO memory
 ```
 
-Change the policy to `allkeys-lfu` for the second run. Runtime config changes must also be reflected in the startup config if you want them to survive a restart. Only use cache-clearing/reset commands against the dedicated experiment instance.
+Compose defaults to a 32 MiB budget and `allkeys-lru`. Set `REDIS_MAXMEMORY` or `REDIS_EVICTION_POLICY` in the root `.env` file and recreate the Redis service to change its startup configuration.
 
 ## 9. R2 and Cloudflare CDN
 
@@ -464,7 +451,7 @@ Plaintext gRPC on loopback is acceptable for local learning. Use TLS and appropr
 ### My links
 
 - URL input, optional title input, and Create link button.
-- Inline validation errors; disable duplicate form submissions while pending.
+- Basic URL validation and a visible API error; disable form submissions while pending.
 - Result card with short URL, Copy link, View analytics, QR preview, and Download QR.
 - Pending/processing placeholder instead of a broken image; Download is disabled until ready.
 - Failed state with a clear message. Add a requeue action only when its backend behavior is implemented.
@@ -492,7 +479,7 @@ contracts/proto/            gRPC source definitions
 contracts/events/           JSON event schemas and fixtures
 infra/                      Docker Compose and Redis config
 scripts/                    Seed, load, requeue, and replay helpers
-docs/                       Learning notes and benchmark results
+docs/                       Learning notes
 ```
 
 Use npm workspaces for Node projects; keep Go's module inside analytics. Do not create a broad shared abstraction layer before there is real duplication.
@@ -540,7 +527,7 @@ Recommended developer scripts to implement: `dev:web`, `dev:api`, `dev:qr`, `pro
 
 ### Milestone 1 — Working shortener
 
-- [ ] Create links with validation, secure code generation, and collision retry.
+- [ ] Create links with validation and UUID code generation.
 - [ ] Implement list, detail, and redirect routes.
 - [ ] Create MongoDB indexes.
 - [ ] Verify create/list/redirect through API calls before building React.
@@ -552,9 +539,9 @@ Recommended developer scripts to implement: `dev:web`, `dev:api`, `dev:qr`, `pro
 - [ ] Add cache-aside redirect resolution with TTL and bounded Redis timeouts.
 - [ ] Track cache outcomes and MongoDB lookup count.
 - [ ] Verify redirects still work with Redis stopped.
-- [ ] Complete the controlled LRU/LFU comparison and record results.
+- [ ] Configure a cache memory budget and an eviction policy, defaulting to LRU.
 
-**Done when:** repeat lookups hit cache, cold lookups hit MongoDB, data exceeds the chosen cache budget, and you can explain observed eviction differences.
+**Done when:** repeat lookups hit cache, cold lookups hit MongoDB, redirects work while Redis is unavailable, and Redis starts with the configured memory budget and eviction policy.
 
 ### Milestone 3 — Kafka-driven QR generation and R2
 
@@ -618,7 +605,7 @@ Recommended developer scripts to implement: `dev:web`, `dev:api`, `dev:qr`, `pro
 
 Focus automated tests on boundaries where mistakes change behavior:
 
-- URL scheme/credentials validation and collision retry.
+- Basic HTTP/HTTPS URL validation and UUID code generation.
 - Cache hit/miss/fallback and correct redirect headers.
 - Click deduplication and date-range aggregation, including midnight UTC boundaries.
 - QR decoding and deterministic object keys.
@@ -669,4 +656,3 @@ Technical references checked on 2026-10-03. The architecture, contracts, default
 - [S3 PutObject behavior](https://docs.aws.amazon.com/AmazonS3/latest/API/API_PutObject.html)
 - [MongoDB transactions](https://www.mongodb.com/docs/manual/core/transactions/)
 - [Node QR code generator](https://github.com/soldair/node-qrcode)
-

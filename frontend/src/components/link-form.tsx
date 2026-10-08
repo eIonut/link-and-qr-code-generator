@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useState, type FormEvent } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { ArrowRight, Download, Link2, QrCode } from "lucide-react";
 import { Button } from "./ui/button";
@@ -10,38 +10,11 @@ import { LinkResult } from "./link-result";
 export function LinkForm() {
   const [destinationUrl, setDestinationUrl] = useState("");
   const [title, setTitle] = useState("");
-  const [urlError, setUrlError] = useState("");
-  const urlInput = useRef<HTMLInputElement>(null);
-  const resultHeading = useRef<HTMLHeadingElement>(null);
-  const creation = useMutation({ mutationFn: createLink, retry: false });
-
-  useEffect(() => {
-    if (creation.isSuccess) resultHeading.current?.focus();
-  }, [creation.isSuccess]);
+  const creation = useMutation({ mutationFn: createLink });
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (creation.isPending) return;
-    const destination = destinationUrl.trim();
-    let error = "";
-    try {
-      const url = new URL(destination);
-      if (!["http:", "https:"].includes(url.protocol) || !/^https?:\/\//i.test(destination)) {
-        error = "Use a URL that starts with http:// or https://.";
-      } else if (url.username || url.password) {
-        error = "Use a URL without an embedded username or password.";
-      } else if (destination.length > 2048) {
-        error = "The destination URL must be 2,048 characters or fewer.";
-      }
-    } catch {
-      error = "Enter a complete URL, such as https://example.com.";
-    }
-    setUrlError(error);
-    if (error) {
-      urlInput.current?.focus();
-      return;
-    }
-    creation.mutate({ destinationUrl: destination, ...(title.trim() && { title: title.trim() }) });
+    creation.mutate({ destinationUrl: destinationUrl.trim(), title: title.trim() });
   }
 
   return (
@@ -67,11 +40,10 @@ export function LinkForm() {
             <CardDescription>Paste a destination and get a link with a shareable QR code.</CardDescription>
           </CardHeader>
           <CardContent className="px-6 sm:px-8">
-            <form noValidate onSubmit={handleSubmit} className="space-y-5" aria-busy={creation.isPending}>
+            <form onSubmit={handleSubmit} className="space-y-5" aria-busy={creation.isPending}>
               <div className="space-y-2">
                 <label htmlFor="destination-url" className="text-sm font-medium">Destination URL</label>
                 <Input
-                  ref={urlInput}
                   id="destination-url"
                   name="destinationUrl"
                   type="url"
@@ -83,20 +55,14 @@ export function LinkForm() {
                   spellCheck={false}
                   value={destinationUrl}
                   disabled={creation.isPending}
-                  aria-invalid={!!urlError}
-                  aria-describedby={urlError ? "url-error" : "url-hint"}
+                  aria-describedby="url-hint"
                   className="h-12 px-4"
                   onChange={(event) => {
                     setDestinationUrl(event.target.value);
-                    setUrlError("");
                     if (creation.isError) creation.reset();
                   }}
                 />
-                {urlError ? (
-                  <p id="url-error" role="alert" className="text-sm text-destructive">{urlError}</p>
-                ) : (
-                  <p id="url-hint" className="text-xs text-muted-foreground">Include http:// or https://.</p>
-                )}
+                <p id="url-hint" className="text-xs text-muted-foreground">Include http:// or https://.</p>
               </div>
 
               <div className="flex flex-col gap-4 sm:flex-row sm:items-end">
@@ -130,7 +96,7 @@ export function LinkForm() {
         </Card>
 
         {creation.data ? (
-          <LinkResult key={creation.data.id} initialLink={creation.data} headingRef={resultHeading} />
+          <LinkResult key={creation.data.id} initialLink={creation.data} />
         ) : (
           <Card className="shadow-none">
             <CardContent className="flex flex-col items-center gap-4 py-8 text-center">

@@ -24,6 +24,7 @@ services:
       PORT: "3000"
       SHORT_BASE_URL: ${SHORT_BASE_URL:-http://localhost:3000/r}
       MONGODB_URI: mongodb://mongodb:27017/qr_code_generator
+      REDIS_URL: redis://redis:6379
     depends_on:
       mongodb:
         condition: service_healthy
@@ -48,7 +49,14 @@ services:
 
   redis:
     image: redis:8-alpine
-    command: ["redis-server", "--appendonly", "yes"]
+    command:
+      - redis-server
+      - --appendonly
+      - "yes"
+      - --maxmemory
+      - ${REDIS_MAXMEMORY:-32mb}
+      - --maxmemory-policy
+      - ${REDIS_EVICTION_POLICY:-allkeys-lru}
     ports:
       - "127.0.0.1:6379:6379"
     volumes:
