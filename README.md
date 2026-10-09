@@ -10,6 +10,22 @@ test, and vet the Go worker. Tests use mocks and local test servers, so no
 running services or R2 credentials are needed. View results in the repository's
 **Actions** tab.
 
+An optional final job posts all three results and a link to the run to Slack,
+including when a build or test fails. To enable it:
+
+1. [Create a Slack app](https://api.slack.com/apps) from scratch in your workspace.
+2. Open **Incoming Webhooks** and activate them.
+3. Click **Add New Webhook to Workspace**, choose a channel, and authorize it.
+4. Copy its webhook URL into a GitHub repository secret named
+   `SLACK_WEBHOOK_URL` under **Settings → Secrets and variables → Actions →
+   New repository secret**.
+5. Push a commit to run the pipeline and receive a message.
+
+The message step is skipped until the secret exists. Keep the webhook URL in
+GitHub Secrets; it is a credential and does not belong in the repository or
+the app's `.env`. The job uses the
+[official Slack action with an incoming webhook](https://docs.slack.dev/tools/slack-github-action/sending-data-slack-incoming-webhook/).
+
 Run the frontend, API, MongoDB, Redis, and Kafka with Docker Compose:
 
 ```sh

@@ -62,3 +62,26 @@ jobs:
           go build ./...
           go test -race ./...
           go vet ./...
+
+  notify:
+    name: Notify Slack
+    needs: [api, frontend, worker]
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    env:
+      SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+    steps:
+      - name: Send results to Slack
+        if: ${{ env.SLACK_WEBHOOK_URL != '' }}
+        uses: slackapi/slack-github-action@v4.0.0
+        with:
+          webhook: ${{ env.SLACK_WEBHOOK_URL }}
+          webhook-type: incoming-webhook
+          errors: true
+          payload: |
+            text: |
+              Build and test finished for ${{ github.repository }} (${{ github.ref_name }})
+              API: ${{ needs.api.result }}
+              Frontend: ${{ needs.frontend.result }}
+              Go worker: ${{ needs.worker.result }}
+              <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View pipeline>
