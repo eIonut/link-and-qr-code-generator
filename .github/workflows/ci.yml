@@ -6,7 +6,8 @@ permissions:
   contents: read
 
 jobs:
-  build-and-test:
+  api:
+    name: Build and test API
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -25,11 +26,30 @@ jobs:
           pnpm build
           pnpm test
 
+  frontend:
+    name: Build frontend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+
+      - name: Install pnpm
+        run: npm install --global pnpm@11.8.0
+
       - name: Build frontend
         working-directory: frontend
         run: |
           pnpm install --frozen-lockfile
           pnpm build
+
+  worker:
+    name: Build and test Go worker
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-go@v7
         with:

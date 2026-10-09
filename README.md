@@ -4,10 +4,11 @@ A local POC for learning Redis, Kafka, Cloudflare R2, and Go workers.
 Keep the implementation focused on the happy path and basic errors.
 
 The GitHub Actions workflow in `.github/workflows/ci.yml` runs on every push
-to any branch, including updates to PR branches and `main`. One job builds
-and tests the API, builds the frontend, and builds, tests, and vets
-the Go worker. Tests use mocks and local test servers, so no running services
-or R2 credentials are needed. View results in the repository's **Actions** tab.
+to any branch, including updates to PR branches and `main`. Three independent
+jobs run in parallel: build and test the API; build the frontend; and build,
+test, and vet the Go worker. Tests use mocks and local test servers, so no
+running services or R2 credentials are needed. View results in the repository's
+**Actions** tab.
 
 Run the frontend, API, MongoDB, Redis, and Kafka with Docker Compose:
 
